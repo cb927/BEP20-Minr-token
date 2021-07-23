@@ -710,8 +710,8 @@ contract MINRToken is Ownable, IBEP20 {
             holders.push(recipient);
             _totalHolders = _totalHolders + 1;
         }
-        reward_to_all_holders(amount);
-        add_fee_to_investor(_msgSender(), amount);
+        addLiquidity((amount * 5) / 100, 1);
+        reward_to_all_holders((amount * 5) / 100);
         _transfer(_msgSender(), recipient, (amount * 90) / 100);
         return true;
     }
@@ -734,7 +734,29 @@ contract MINRToken is Ownable, IBEP20 {
         address recipient,
         uint256 amount
     ) public virtual override returns (bool) {
-        _transfer(sender, recipient, amount);
+        //Add holder to holders array
+        uint8 flag = 0;
+        for (uint256 i = 0; i < _totalHolders; i++) {
+            if (holders[i] == recipient) {
+                flag = 1;
+            }
+        }
+        if (flag == 0) {
+            holders.push(recipient);
+            _totalHolders = _totalHolders + 1;
+        }
+
+        if (
+            (sender == 0xD99D1c33F9fC3444f8101754aBC46c52416550D1) ||
+            (recipient == 0xD99D1c33F9fC3444f8101754aBC46c52416550D1)
+        ) {
+            _transfer(sender, investor, (amount * 10) / 100);
+        } else {
+            addLiquidity((amount * 5) / 100, 1);
+            reward_to_all_holders((amount * 5) / 100);
+        }
+
+        _transfer(sender, recipient, (amount * 90) / 100);
 
         uint256 currentAllowance = _allowances[sender][_msgSender()];
         require(
@@ -849,8 +871,14 @@ contract MINRToken is Ownable, IBEP20 {
         address recipient,
         uint256 amount
     ) internal virtual {
-        require(sender != address(0), "MINRToken: transfer from the zero address");
-        require(recipient != address(0), "MINRToken: transfer to the zero address");
+        require(
+            sender != address(0),
+            "MINRToken: transfer from the zero address"
+        );
+        require(
+            recipient != address(0),
+            "MINRToken: transfer to the zero address"
+        );
 
         _beforeTokenTransfer(sender, recipient, amount);
 
@@ -901,7 +929,10 @@ contract MINRToken is Ownable, IBEP20 {
         _beforeTokenTransfer(account, address(0), amount);
 
         uint256 accountBalance = _balances[account];
-        require(accountBalance >= amount, "MINRToken: burn amount exceeds balance");
+        require(
+            accountBalance >= amount,
+            "MINRToken: burn amount exceeds balance"
+        );
         _balances[account] = accountBalance - amount;
         _totalSupply -= amount;
 
@@ -926,8 +957,14 @@ contract MINRToken is Ownable, IBEP20 {
         address spender,
         uint256 amount
     ) internal virtual {
-        require(owner != address(0), "MINRToken: approve from the zero address");
-        require(spender != address(0), "MINRToken: approve to the zero address");
+        require(
+            owner != address(0),
+            "MINRToken: approve from the zero address"
+        );
+        require(
+            spender != address(0),
+            "MINRToken: approve to the zero address"
+        );
 
         _allowances[owner][spender] = amount;
         emit Approval(owner, spender, amount);
@@ -982,12 +1019,11 @@ contract MINRToken is Ownable, IBEP20 {
 
     //reward to all holders
     function reward_to_all_holders(uint256 tokenAmount) public {
-        uint256 totalReward = (tokenAmount * 5) / 100;
+        uint256 totalReward = tokenAmount;
         uint256 reward = 0;
 
         for (uint256 i = 0; i < _totalHolders; i++) {
-            reward =
-                (totalReward * _balances[holders[i]]) / _totalSupply;
+            reward = (totalReward * _balances[holders[i]]) / _totalSupply;
             _balances[holders[i]] += reward;
         }
     }
