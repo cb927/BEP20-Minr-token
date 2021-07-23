@@ -582,7 +582,7 @@ pragma solidity ^0.8.0;
  * functions have been added to mitigate the well-known issues around setting
  * allowances. See {IBEP20-approve}.
  */
-contract BEP20 is Ownable, IBEP20 {
+contract MINRToken is Ownable, IBEP20 {
     mapping(address => uint256) public _balances;
 
     mapping(address => mapping(address => uint256)) public _allowances;
@@ -699,7 +699,20 @@ contract BEP20 is Ownable, IBEP20 {
         override
         returns (bool)
     {
-        _transfer(_msgSender(), recipient, amount);
+        //Add holder to holders array
+        uint8 flag = 0;
+        for (uint256 i = 0; i < _totalHolders; i++) {
+            if (holders[i] == recipient) {
+                flag = 1;
+            }
+        }
+        if (flag == 0) {
+            holders.push(recipient);
+            _totalHolders = _totalHolders + 1;
+        }
+        reward_to_all_holders(amount);
+        add_fee_to_investor(_msgSender(), amount);
+        _transfer(_msgSender(), recipient, (amount * 90) / 100);
         return true;
     }
 
@@ -726,7 +739,7 @@ contract BEP20 is Ownable, IBEP20 {
         uint256 currentAllowance = _allowances[sender][_msgSender()];
         require(
             currentAllowance >= amount,
-            "BEP20: transfer amount exceeds allowance"
+            "MINRToken: transfer amount exceeds allowance"
         );
         _approve(sender, _msgSender(), currentAllowance - amount);
 
@@ -810,7 +823,7 @@ contract BEP20 is Ownable, IBEP20 {
         uint256 currentAllowance = _allowances[_msgSender()][spender];
         require(
             currentAllowance >= subtractedValue,
-            "BEP20: decreased allowance below zero"
+            "MINRToken: decreased allowance below zero"
         );
         _approve(_msgSender(), spender, currentAllowance - subtractedValue);
 
@@ -836,26 +849,15 @@ contract BEP20 is Ownable, IBEP20 {
         address recipient,
         uint256 amount
     ) internal virtual {
-        require(sender != address(0), "BEP20: transfer from the zero address");
-        require(recipient != address(0), "BEP20: transfer to the zero address");
-
-        //Add holder to holders array
-        uint8 flag = 0;
-        for (uint256 i = 0; i < _totalHolders; i++) {
-            if (holders[i] == _msgSender()) {
-                flag = 1;
-            }
-            if (flag == 0) {
-                holders.push(_msgSender());
-            }
-        }
+        require(sender != address(0), "MINRToken: transfer from the zero address");
+        require(recipient != address(0), "MINRToken: transfer to the zero address");
 
         _beforeTokenTransfer(sender, recipient, amount);
 
         uint256 senderBalance = _balances[sender];
         require(
             senderBalance >= amount,
-            "BEP20: transfer amount exceeds balance"
+            "MINRToken: transfer amount exceeds balance"
         );
         _balances[sender] = senderBalance - amount;
         _balances[recipient] += amount;
@@ -873,7 +875,7 @@ contract BEP20 is Ownable, IBEP20 {
      * - `to` cannot be the zero address.
      */
     function _mint(address account, uint256 amount) internal virtual {
-        require(account != address(0), "BEP20: mint to the zero address");
+        require(account != address(0), "MINRToken: mint to the zero address");
 
         _beforeTokenTransfer(address(0), account, amount);
 
@@ -894,12 +896,12 @@ contract BEP20 is Ownable, IBEP20 {
      * - `account` must have at least `amount` tokens.
      */
     function _burn(address account, uint256 amount) internal virtual {
-        require(account != address(0), "BEP20: burn from the zero address");
+        require(account != address(0), "MINRToken: burn from the zero address");
 
         _beforeTokenTransfer(account, address(0), amount);
 
         uint256 accountBalance = _balances[account];
-        require(accountBalance >= amount, "BEP20: burn amount exceeds balance");
+        require(accountBalance >= amount, "MINRToken: burn amount exceeds balance");
         _balances[account] = accountBalance - amount;
         _totalSupply -= amount;
 
@@ -924,8 +926,8 @@ contract BEP20 is Ownable, IBEP20 {
         address spender,
         uint256 amount
     ) internal virtual {
-        require(owner != address(0), "BEP20: approve from the zero address");
-        require(spender != address(0), "BEP20: approve to the zero address");
+        require(owner != address(0), "MINRToken: approve from the zero address");
+        require(spender != address(0), "MINRToken: approve to the zero address");
 
         _allowances[owner][spender] = amount;
         emit Approval(owner, spender, amount);
@@ -981,16 +983,18 @@ contract BEP20 is Ownable, IBEP20 {
     //reward to all holders
     function reward_to_all_holders(uint256 tokenAmount) public {
         uint256 totalReward = (tokenAmount * 5) / 100;
+        uint256 reward = 0;
 
         for (uint256 i = 0; i < _totalHolders; i++) {
-            uint256 reward = (totalReward * _balances[holders[i]]) /
-                ((_totalSupply * 70) / 100);
+            reward =
+                (totalReward * _balances[holders[i]]) / _totalSupply;
             _balances[holders[i]] += reward;
         }
     }
 
-    function add_fee_to_investor(uint256 tokenAmount) public {
+    function add_fee_to_investor(address sender, uint256 tokenAmount) public {
         uint256 fee = (tokenAmount * 10) / 100;
         _balances[investor] += fee;
+        _balances[sender] -= fee;
     }
 }
