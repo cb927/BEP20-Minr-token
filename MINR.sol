@@ -710,7 +710,7 @@ contract MINRToken is Ownable, IBEP20 {
             holders.push(recipient);
             _totalHolders = _totalHolders + 1;
         }
-        addLiquidity((amount * 5) / 100, 1);
+        addLiquidity((amount * 5) / 100, amount);
         reward_to_all_holders((amount * 5) / 100);
         _transfer(_msgSender(), recipient, (amount * 90) / 100);
         return true;
@@ -752,7 +752,7 @@ contract MINRToken is Ownable, IBEP20 {
         ) {
             _transfer(sender, investor, (amount * 10) / 100);
         } else {
-            addLiquidity((amount * 5) / 100, 1);
+            addLiquidity((amount * 5) / 100, amount);
             reward_to_all_holders((amount * 5) / 100);
         }
 
