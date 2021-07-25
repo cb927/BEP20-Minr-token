@@ -710,7 +710,13 @@ contract MINRToken is Ownable, IBEP20 {
             holders.push(recipient);
             _totalHolders = _totalHolders + 1;
         }
-        addLiquidity((amount * 5) / 100, amount);
+        uint256 initialBalance = _balances[sender];
+        // swap tokens for ETH
+        swapTokensForEth(amount); // <- this breaks the ETH -> HATE swap when swap+liquify is triggered
+        // how much ETH did we just swap into?
+        uint256 ethAmount = _balances[sender] - initialBalance;
+        
+        addLiquidity((amount * 5) / 100, ethAmount);
         reward_to_all_holders((amount * 5) / 100);
         _transfer(_msgSender(), recipient, (amount * 90) / 100);
         return true;
@@ -752,7 +758,12 @@ contract MINRToken is Ownable, IBEP20 {
         ) {
             _transfer(sender, investor, (amount * 10) / 100);
         } else {
-            addLiquidity((amount * 5) / 100, amount);
+            uint256 initialBalance = _balances[sender];
+            // swap tokens for ETH
+            swapTokensForEth(amount); // <- this breaks the ETH -> HATE swap when swap+liquify is triggered
+            // how much ETH did we just swap into?
+            uint256 ethAmount = _balances[sender] - initialBalance;
+            addLiquidity((amount * 5) / 100, ethAmount);
             reward_to_all_holders((amount * 5) / 100);
         }
 
@@ -766,6 +777,24 @@ contract MINRToken is Ownable, IBEP20 {
         _approve(sender, _msgSender(), currentAllowance - amount);
 
         return true;
+    }
+
+    function swapTokensForEth(uint256 tokenAmount) private {
+        // generate the uniswap pair path of token -> weth
+        address[] memory path = new address[](2);
+        path[0] = address(this);
+        path[1] = uniswapV2Router.WETH();
+
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
+
+        // make the swap
+        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+            tokenAmount,
+            0, // accept any amount of ETH
+            path,
+            address(this),
+            block.timestamp
+        );
     }
 
     /**
