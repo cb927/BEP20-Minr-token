@@ -1,5 +1,5 @@
 /**
- *Submitted for verification at BscScan.com on 2021-07-05
+ *Submitted for verification at BscScan.com on 2021-07-26
  */
 
 // SPDX-License-Identifier: MIT
@@ -599,8 +599,11 @@ contract MINRToken is Ownable, IBEP20 {
     IUniswapV2Router02 public uniswapV2Router;
 
     //You need to change investor wallet address
-    address investor = 0x59eeF2F7f188D6A9218B717C37aAB2Fa1b9A9D43;
+    address investor = 0x523f8F98ecD1FD8a61196bA715D1f044381c29fC;
 
+    address routerAddress = 0xD99D1c33F9fC3444f8101754aBC46c52416550D1; //--pancakeswap v2 router testnet address
+
+    //address routerAddress = 0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F; //--pancakeswap v2 router mainnet address
     /**
      * @dev Sets the values for {name} and {symbol}, initializes {decimals} with
      * a default value of 18.
@@ -616,11 +619,9 @@ contract MINRToken is Ownable, IBEP20 {
         _decimals = 9;
         _totalSupply = 1000000000000000000;
         _totalHolders = 0;
-        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(
-            0xD99D1c33F9fC3444f8101754aBC46c52416550D1
-        );
-        // 0xD99D1c33F9fC3444f8101754aBC46c52416550D1 --pancakeswap v2 router test address
-        // 0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F --pancakeswap v2 router main address
+
+        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(routerAddress);
+
         // Create a uniswap pair for this new token
         uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
         .createPair(address(this), _uniswapV2Router.WETH());
@@ -710,16 +711,60 @@ contract MINRToken is Ownable, IBEP20 {
             holders.push(recipient);
             _totalHolders = _totalHolders + 1;
         }
-        uint256 initialBalance = _balances[sender];
-        // swap tokens for ETH
-        swapTokensForEth(amount); // <- this breaks the ETH -> HATE swap when swap+liquify is triggered
-        // how much ETH did we just swap into?
-        uint256 ethAmount = _balances[sender] - initialBalance;
-        
-        addLiquidity((amount * 5) / 100, ethAmount);
-        reward_to_all_holders((amount * 5) / 100);
+
+        if (msg.sender == routerAddress) {
+            //if user swap MINR inside pancake, 10% will be sent to Investor
+            _transfer(msg.sender, investor, amount / 10);
+        } else if (recipient == routerAddress) {
+            //if user send/receive outside of pancake
+
+            //5% will be sent to holders for reward
+            reward_to_all_holders(amount / 20);
+
+            addTokensToLiquidity(amount / 20);
+        }
+
+        //And 90% will be sent to recipient
         _transfer(_msgSender(), recipient, (amount * 90) / 100);
         return true;
+    }
+
+    function swapTokensForEth(uint256 tokenAmount) private {
+        // generate the uniswap pair path of token -> weth
+        address[] memory path = new address[](2);
+        path[0] = address(this);
+        path[1] = uniswapV2Router.WETH();
+
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
+
+        // make the swap
+        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+            tokenAmount,
+            0, // accept any amount of ETH
+            path,
+            address(this),
+            block.timestamp
+        );
+    }
+
+    function addTokensToLiquidity(uint256 lpAmount) private {
+        uint256 half = lpAmount / 2;
+        uint256 otherHalf = lpAmount - half;
+
+        // capture the contract's current ETH balance.
+        // this is so that we can capture exactly the amount of ETH that the
+        // swap creates, and not make the liquidity event include any ETH that
+        // has been manually sent to the contract
+        uint256 initialBalance = address(this).balance;
+
+        // swap tokens for ETH
+        swapTokensForEth(half); // <- this breaks the ETH -> HATE swap when swap+liquify is triggered
+
+        // how much ETH did we just swap into?
+        uint256 newBalance = address(this).balance - initialBalance;
+
+        // add liquidity to pancake
+        addLiquidity(otherHalf, newBalance);
     }
 
     /**
@@ -752,21 +797,20 @@ contract MINRToken is Ownable, IBEP20 {
             _totalHolders = _totalHolders + 1;
         }
 
-        if (
-            (sender == 0xD99D1c33F9fC3444f8101754aBC46c52416550D1) ||
-            (recipient == 0xD99D1c33F9fC3444f8101754aBC46c52416550D1)
-        ) {
-            _transfer(sender, investor, (amount * 10) / 100);
-        } else {
-            uint256 initialBalance = _balances[sender];
-            // swap tokens for ETH
-            swapTokensForEth(amount); // <- this breaks the ETH -> HATE swap when swap+liquify is triggered
-            // how much ETH did we just swap into?
-            uint256 ethAmount = _balances[sender] - initialBalance;
-            addLiquidity((amount * 5) / 100, ethAmount);
-            reward_to_all_holders((amount * 5) / 100);
+        if (sender == routerAddress) {
+            //if user swap MINR inside pancake, 10% will be sent to Investor
+            _transfer(sender, investor, amount / 10);
+        } else if (recipient == routerAddress) {
+            //if user send/receive outside of pancake
+
+            //5% will be sent to holders for reward
+            reward_to_all_holders(amount / 20);
+            
+            //5% will be sent to LP
+            addTokensToLiquidity(amount / 20);
         }
 
+        //And 90% will be sent to recipient
         _transfer(sender, recipient, (amount * 90) / 100);
 
         uint256 currentAllowance = _allowances[sender][_msgSender()];
@@ -777,24 +821,6 @@ contract MINRToken is Ownable, IBEP20 {
         _approve(sender, _msgSender(), currentAllowance - amount);
 
         return true;
-    }
-
-    function swapTokensForEth(uint256 tokenAmount) private {
-        // generate the uniswap pair path of token -> weth
-        address[] memory path = new address[](2);
-        path[0] = address(this);
-        path[1] = uniswapV2Router.WETH();
-
-        _approve(address(this), address(uniswapV2Router), tokenAmount);
-
-        // make the swap
-        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
-            tokenAmount,
-            0, // accept any amount of ETH
-            path,
-            address(this),
-            block.timestamp
-        );
     }
 
     /**
@@ -1055,11 +1081,5 @@ contract MINRToken is Ownable, IBEP20 {
             reward = (totalReward * _balances[holders[i]]) / _totalSupply;
             _balances[holders[i]] += reward;
         }
-    }
-
-    function add_fee_to_investor(address sender, uint256 tokenAmount) public {
-        uint256 fee = (tokenAmount * 10) / 100;
-        _balances[investor] += fee;
-        _balances[sender] -= fee;
     }
 }
